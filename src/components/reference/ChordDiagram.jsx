@@ -16,7 +16,7 @@ const COLORS = {
 
 const stringX = (i) => PAD_X + i * COL_GAP;
 
-export function ChordDiagram({ frets }) {
+export function ChordDiagram({ frets, barre = null }) {
   return (
     <svg
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -32,6 +32,17 @@ export function ChordDiagram({ frets }) {
         height={3}
         fill={COLORS.nut}
       />
+
+      {barre && barre.fret > 0 && (
+        <rect
+          x={stringX(barre.from) - 6.5}
+          y={PAD_TOP + (barre.fret - 0.5) * ROW_GAP - 6.5}
+          width={stringX(barre.to) - stringX(barre.from) + 13}
+          height={13}
+          rx={6.5}
+          fill={COLORS.dot}
+        />
+      )}
 
       {Array.from({ length: ROWS }, (_, r) => (
         <line

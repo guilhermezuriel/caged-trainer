@@ -23,6 +23,10 @@ export function Legend() {
       <span className="flex items-center gap-2">
         <span className="text-stone-500 font-bold">×</span> abafada
       </span>
+      <span className="flex items-center gap-2">
+        <span className="inline-block w-4 h-2 rounded-full bg-amber-400" /> pestana
+        (cordas livres seguem a casa)
+      </span>
     </div>
   );
 }

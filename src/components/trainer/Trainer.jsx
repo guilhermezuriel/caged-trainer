@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SHAPES } from "../../constants/shapes.js";
 import { useCountdown } from "../../hooks/useCountdown.js";
-import { computeCorrect } from "../../utils/music.js";
+import { chordOfDay } from "../../utils/dailyChord.js";
+import { computeCorrect, deriveBoard } from "../../utils/music.js";
 import { Fretboard } from "../fretboard/Fretboard.jsx";
 import { Legend } from "../ui/Legend.jsx";
 import { ActionButtons } from "./ActionButtons.jsx";
@@ -9,18 +10,30 @@ import { ChallengeCard } from "./ChallengeCard.jsx";
 import { ChordSelectors } from "./ChordSelectors.jsx";
 import { Feedback } from "./Feedback.jsx";
 import { RandomizerSettings } from "./RandomizerSettings.jsx";
+import { SessionPanel } from "./SessionPanel.jsx";
 import { StatusBar } from "./StatusBar.jsx";
 import { TimerPanel } from "./TimerPanel.jsx";
 
 const EMPTY_BOARD = Array(6).fill(null);
 const DEFAULT_ENABLED_SHAPES = { C: true, A: true, G: true, E: true, D: true };
 const DEFAULT_DURATION = 30;
+const ADVANCE_DELAY = 1100;
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 export function Trainer() {
   const [quality, setQuality] = useState("maior");
   const [rootPc, setRootPc] = useState(9);
   const [shape, setShape] = useState("E");
   const [board, setBoard] = useState(EMPTY_BOARD);
+  const [barreFret, setBarreFret] = useState(null);
   const [checked, setChecked] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -35,6 +48,11 @@ export function Trainer() {
 
   const [timerMode, setTimerMode] = useState("off");
   const [duration, setDurationState] = useState(DEFAULT_DURATION);
+
+  const [session, setSession] = useState(null);
+  const sessionRef = useRef(null);
+  const advanceTimer = useRef(null);
+  const daily = useMemo(() => chordOfDay(), []);
 
   const onTimerExpire = useCallback(() => {
     setShowAnswer(true);
@@ -53,8 +71,9 @@ export function Trainer() {
     [quality, rootPc, shape],
   );
   const rootIdx = SHAPES[quality][shape].root;
-  const perString = board.map((v, i) => v !== null && v === correct[i]);
-  const allCorrect = correct.every((c, i) => board[i] === c);
+  const effective = deriveBoard(board, barreFret);
+  const perString = effective.map((v, i) => v !== null && v === correct[i]);
+  const allCorrect = correct.every((c, i) => effective[i] === c);
   const correctCount = perString.filter(Boolean).length;
 
   const loadChallenge = useCallback((q, r, s) => {
@@ -62,10 +81,56 @@ export function Trainer() {
     setRootPc(r);
     setShape(s);
     setBoard(EMPTY_BOARD);
+    setBarreFret(null);
     setChecked(false);
     setShowAnswer(false);
     setScored(false);
   }, []);
+
+  const updateSession = useCallback((next) => {
+    sessionRef.current = next;
+    setSession(next);
+  }, []);
+
+  const startSession = useCallback(
+    (r, q) => {
+      const forms = shuffle(Object.keys(SHAPES[q]));
+      updateSession({ rootPc: r, quality: q, forms, index: 0, done: false });
+      loadChallenge(q, r, forms[0]);
+    },
+    [loadChallenge, updateSession],
+  );
+
+  const advanceSession = useCallback(() => {
+    const s = sessionRef.current;
+    if (!s || s.done) return;
+    const next = s.index + 1;
+    if (next >= s.forms.length) {
+      updateSession({ ...s, done: true });
+      setShowAnswer(false);
+      setChecked(false);
+    } else {
+      updateSession({ ...s, index: next });
+      loadChallenge(s.quality, s.rootPc, s.forms[next]);
+    }
+  }, [loadChallenge, updateSession]);
+
+  const endSession = useCallback(() => {
+    clearTimeout(advanceTimer.current);
+    updateSession(null);
+  }, [updateSession]);
+
+  useEffect(() => () => clearTimeout(advanceTimer.current), []);
+
+  const handleToggleBarre = () => {
+    if (checked) setChecked(false);
+    setBarreFret((prev) => (prev === null ? 0 : null));
+  };
+
+  const handleMoveBarre = (f) => {
+    if (checked) setChecked(false);
+    setBarreFret(f);
+  };
 
   const handleQualityChange = (q) => {
     const nextShape = SHAPES[q][shape] ? shape : "E";
@@ -105,6 +170,10 @@ export function Trainer() {
         setHits((h) => h + 1);
         setScored(true);
         if (timerMode === "down") timer.setRunning(false);
+      }
+      if (sessionRef.current && !sessionRef.current.done) {
+        clearTimeout(advanceTimer.current);
+        advanceTimer.current = setTimeout(advanceSession, ADVANCE_DELAY);
       }
     } else {
       setStreak(0);
@@ -150,6 +219,22 @@ export function Trainer() {
 
       <ChallengeCard quality={quality} rootPc={rootPc} shape={shape} />
 
+      <SessionPanel
+        session={session}
+        rootPc={rootPc}
+        quality={quality}
+        daily={daily}
+        onStart={() => startSession(rootPc, quality)}
+        onRandom={() =>
+          startSession(Math.floor(Math.random() * 12), quality)
+        }
+        onDaily={() => startSession(daily.rootPc, daily.quality)}
+        onExit={endSession}
+        onRestart={() =>
+          startSession(session.rootPc, session.quality)
+        }
+      />
+
       <TimerPanel
         mode={timerMode}
         duration={duration}
@@ -167,6 +252,7 @@ export function Trainer() {
         shape={shape}
         validShapes={validShapes}
         showNotes={showNotes}
+        hideSelectors={session !== null}
         onRootChange={(r) => loadChallenge(quality, r, shape)}
         onShapeChange={(s) => loadChallenge(quality, rootPc, s)}
         onRandomize={handleRandomize}
@@ -175,6 +261,8 @@ export function Trainer() {
 
       <Fretboard
         board={board}
+        effective={effective}
+        barreFret={barreFret}
         correct={correct}
         rootIdx={rootIdx}
         checked={checked}
@@ -182,6 +270,8 @@ export function Trainer() {
         showAnswer={showAnswer}
         showNotes={showNotes}
         onPlace={handlePlace}
+        onToggleBarre={handleToggleBarre}
+        onMoveBarre={handleMoveBarre}
       />
 
       {checked && (
@@ -199,15 +289,17 @@ export function Trainer() {
         onClear={() => loadChallenge(quality, rootPc, shape)}
       />
 
-      <RandomizerSettings
-        quality={quality}
-        enabledRoots={enabledRoots}
-        enabledShapes={enabledShapes}
-        onToggleRoot={handleToggleRoot}
-        onSetAllRoots={handleSetAllRoots}
-        onToggleShape={handleToggleShape}
-        onSetAllShapes={handleSetAllShapes}
-      />
+      {!session && (
+        <RandomizerSettings
+          quality={quality}
+          enabledRoots={enabledRoots}
+          enabledShapes={enabledShapes}
+          onToggleRoot={handleToggleRoot}
+          onSetAllRoots={handleSetAllRoots}
+          onToggleShape={handleToggleShape}
+          onSetAllShapes={handleSetAllShapes}
+        />
+      )}
 
       <Legend />
     </div>

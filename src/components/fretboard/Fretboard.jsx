@@ -1,6 +1,8 @@
+import { useRef } from "react";
 import { NOTES_PT, OPEN_PITCH, STRING_NUM } from "../../constants/notes.js";
 import { INLAYS, NUM_FRETS } from "../../constants/shapes.js";
 import { noteAt } from "../../utils/music.js";
+import { BarreBar } from "./BarreBar.jsx";
 import { FretCell } from "./FretCell.jsx";
 
 const STRING_ROWS = [5, 4, 3, 2, 1, 0];
@@ -8,6 +10,8 @@ const FRETS = Array.from({ length: NUM_FRETS + 1 }, (_, f) => f);
 
 export function Fretboard({
   board,
+  effective,
+  barreFret = null,
   correct,
   rootIdx,
   checked,
@@ -15,26 +19,66 @@ export function Fretboard({
   showAnswer,
   showNotes,
   onPlace,
+  onToggleBarre,
+  onMoveBarre,
 }) {
+  const eff = effective ?? board;
+  const stringsRef = useRef(null);
+
   return (
     <div className="rounded-xl border border-stone-800 bg-stone-900/60 p-3 overflow-x-auto">
       <div className="min-w-max">
         <FretHeader />
-        {STRING_ROWS.map((i) => (
-          <StringRow
-            key={i}
-            stringIdx={i}
-            board={board}
-            correct={correct}
-            rootIdx={rootIdx}
-            checked={checked}
-            right={perString[i]}
-            showAnswer={showAnswer}
-            showNotes={showNotes}
-            onPlace={onPlace}
+        <BarreToggle active={barreFret !== null} onToggle={onToggleBarre} />
+        <div ref={stringsRef} className="relative">
+          {STRING_ROWS.map((i) => (
+            <StringRow
+              key={i}
+              stringIdx={i}
+              board={board}
+              effective={eff}
+              barreFret={barreFret}
+              correct={correct}
+              rootIdx={rootIdx}
+              checked={checked}
+              right={perString[i]}
+              showAnswer={showAnswer}
+              showNotes={showNotes}
+              onPlace={onPlace}
+            />
+          ))}
+          <BarreBar
+            barreFret={barreFret}
+            containerRef={stringsRef}
+            onMove={onMoveBarre}
           />
-        ))}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function BarreToggle({ active, onToggle }) {
+  return (
+    <div className="flex items-center gap-2 py-1.5 select-none">
+      <div className="w-14 shrink-0 text-right pr-2 text-[10px] uppercase tracking-wider text-stone-500">
+        Pestana
+      </div>
+      <button
+        onClick={onToggle}
+        className={`rounded-lg px-3 py-1 text-xs border transition-colors ${
+          active
+            ? "bg-amber-500 border-amber-500 text-stone-950 font-medium"
+            : "bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-500"
+        }`}
+      >
+        {active ? "Ativa" : "Adicionar"}
+      </button>
+      {active && (
+        <span className="text-[11px] text-stone-500">
+          arraste a barra para mover
+        </span>
+      )}
     </div>
   );
 }
@@ -67,6 +111,8 @@ function FretHeader() {
 function StringRow({
   stringIdx,
   board,
+  effective,
+  barreFret,
   correct,
   rootIdx,
   checked,
@@ -76,7 +122,7 @@ function StringRow({
   onPlace,
 }) {
   const thick = stringIdx <= 2 ? "h-0.5" : "h-px";
-  const muted = board[stringIdx] === "x";
+  const muted = effective[stringIdx] === "x";
   const answerMuted = (showAnswer || checked) && correct[stringIdx] === "x";
 
   return (
@@ -109,7 +155,8 @@ function StringRow({
           key={f}
           isOpen={f === 0}
           thick={thick}
-          user={board[stringIdx] === f}
+          user={effective[stringIdx] === f}
+          isBarre={board[stringIdx] === null && barreFret === f}
           isRoot={rootIdx === stringIdx}
           correctHere={correct[stringIdx] === f}
           showAnswer={showAnswer}

@@ -2,6 +2,7 @@ export function FretCell({
   isOpen,
   thick,
   user,
+  isBarre,
   isRoot,
   correctHere,
   showAnswer,
@@ -12,6 +13,7 @@ export function FretCell({
 }) {
   const dot = renderDot({
     user,
+    isBarre,
     checked,
     right,
     isRoot,
@@ -39,6 +41,7 @@ export function FretCell({
 
 function renderDot({
   user,
+  isBarre,
   checked,
   right,
   isRoot,
@@ -50,9 +53,11 @@ function renderDot({
     let color = "bg-amber-400 text-stone-950";
     if (checked) color = right ? "bg-emerald-500 text-white" : "bg-rose-500 text-white";
     const ring = isRoot && (!checked || right) ? "ring-2 ring-yellow-200" : "";
+    // Nota vinda da pestana (não colocada dedo a dedo): levemente atenuada.
+    const fromBarre = isBarre && !checked ? "opacity-70" : "";
     return (
       <span
-        className={`grid place-items-center w-7 h-7 rounded-full text-[10px] font-semibold ${color} ${ring}`}
+        className={`grid place-items-center w-7 h-7 rounded-full text-[10px] font-semibold ${color} ${ring} ${fromBarre}`}
       >
         {note || ""}
       </span>
